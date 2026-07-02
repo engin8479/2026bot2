@@ -1,0 +1,56 @@
+name: Amazon Fiyat Takip Botu
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+
+# Bir önceki tarama bitmeden yenisi başlarsa git push çakışması ve
+# çift bildirim olmasın diye: yeni tetiklenen çalışma, öncekinin
+# bitmesini SIRAYA GİREREK bekler (iptal etmez).
+concurrency:
+  group: amazon-fiyat-takip
+  cancel-in-progress: false
+
+jobs:
+  bot-gorevi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    permissions:
+      contents: write
+    steps:
+      - name: Depoyu Klonla
+        uses: actions/checkout@v3
+
+      - name: Python Kur
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Gerekli Paketleri Yukle
+        run: pip install -r requirements.txt
+
+      - name: Botu Calistir
+        env:
+          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py
+
+      - name: Degisiklikleri Kaydet (Push)
+        if: always()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Dosyayı ekle
+          git add urunler.json
+          
+          # Sadece değişiklik varsa commit at, yoksa sessiz kal
+          git commit -m "Amazon verisi güncellendi" || echo "Degisiklik yok, commit atılmadı."
+          
+          # Hata almamak için önce pull yap
+          git pull --rebase origin main
+          
+          # Push et
+          git push
