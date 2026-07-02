@@ -308,12 +308,12 @@ def ana_program():
 
             if kategori_bitti:
                 break # Dış döngüyü kır (Kategoriyi bitir)
-
-            # API'yi patlatmamak ve bloklanmamak için her 5'li Gruptan SONRA tek seferlik bekleme
+                
+                # API'yi patlatmamak ve bloklanmamak için her 5'li Gruptan SONRA tek seferlik bekleme
             if not kategori_bitti:
-                time.sleep(random.uniform(3, 7))
-
+                time.sleep(random.uniform(1, 3))
         # Her kategori sonrası veritabanını diske yaz
+        
         veritabanini_kaydet()
         print(f"Kategori sonu kaydı yapıldı: {DATA_FILE}")
 
