@@ -5,7 +5,16 @@ import random
 import re
 import requests
 
-# 1. TARANACAK AMAZON TR FİLTRELİ URL LİSTESİ
+# 1. AYARLAR
+BASE_DIR = os.getcwd()
+DATA_FILE = os.path.join(BASE_DIR, "urunler.json")
+
+# Ortam değişkenleri
+SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+# 2. URL LİSTESİ (Senin verdiğin linkler)
 url_listesi = [
     "https://www.amazon.com.tr/s?k=tv&rh=p_6%3AA1UNQM1SR2CHM%2Cp_123%3A15808732%257C1744057%257C195698%257C249374%257C338933%257C46655%257C746331&dc&__mk_tr_TR=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=3SKKHDSUJH9T&qid=1782978103&rnid=91049075031&sprefix=tv%2Caps%2C146&xpid=eHxwq6Wq5sRQ0&ref=sr_nr_p_123_8&ds=v1%3AOohTPxksfF1Ys20Lj72ctsZy24vTuAeFrL%2BswqBL6jM",
     "https://www.amazon.com.tr/s?i=electronics&rh=n%3A13709898031%2Cp_6%3AA1UNQM1SR2CHM%2Cp_123%3A110955%257C222211%257C32374%257C338933&dc&qid=1782978403&rnid=91049075031&xpid=fXX5lWxtbEpkJ&ref=sr_pg_1",
@@ -110,127 +119,80 @@ url_listesi = [
     "https://www.amazon.com.tr/s?i=electronics&srs=44219324031&bbn=44219324031&rh=n%3A44219324031%2Cn%3A12466496031&s=date-desc-rank&dc&fs=true&page=6&qid=1782980187&rnid=44219324031&xpid=x1Qkzzm2n180s&ref=sr_pg_6"
 ]
 
-# Ortam değişkenleri (GitHub Secrets)
-SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "TEST_KEY")
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-
-# main.py dosyasının en başına şu satırı ekle
-import os
-DATA_FILE = os.path.join(os.getcwd(), "urunler.json")
-
-# Eski verileri güvenli yükle
-veritabanı = {}
-if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
+# 3. VERİTABANI YÜKLEME
+if os.path.exists(DATA_FILE):
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             veritabanı = json.load(f)
-    except Exception:
+    except:
         veritabanı = {}
+else:
+    veritabanı = {}
 
 def telegram_mesaj_gonder(mesaj):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print(f"Telegram ayarları eksik. Mesaj: {mesaj}")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mesaj, "parse_mode": "Markdown"}
     try:
         requests.post(url, json=payload, timeout=10)
-    except Exception as e:
-        print(f"Telegram hatası: {e}")
+    except:
+        pass
 
 def amazon_sayfa_tara(url):
     scraper_url = "https://api.scraperapi.com/"
-    payload = {
-        "api_key": SCRAPER_API_KEY,
-        "url": url,
-        "country_code": "tr"
-    }
+    params = {"api_key": SCRAPER_API_KEY, "url": url, "country_code": "tr"}
     try:
-        response = requests.get(scraper_url, params=payload, timeout=60)
-        if response.status_code == 200:
-            return response.text
-        else:
-            print(f"ScraperAPI Hatası ({response.status_code}) - URL: {url}")
-            return None
-    except Exception as e:
-        print(f"İstek Hatası: {e}")
+        response = requests.get(scraper_url, params=params, timeout=60)
+        return response.text if response.status_code == 200 else None
+    except:
         return None
 
 def veriyi_isle(html_icerik):
     bulunan_urunler = []
-    if not html_icerik:
-        return bulunan_urunler
-
-    # Amazon'un farklı HTML varyasyonlarını yakalamak için geliştirilmiş regex kalıpları
-    urun_bloklari = re.findall(r'data-asin="([A-Z0-9]{10})".*?<h2>.*?<span>(.*?)</span>.*?<span class="a-price-whole">(.*?)</span>', html_icerik, re.DOTALL)
+    # Amazon arama sonuçları için geliştirilmiş regex
+    pattern = r'data-asin="([A-Z0-9]{10})".*?<h2.*?>(.*?)</h2>.*?<span class="a-price-whole">(.*?)</span>'
+    matches = re.findall(pattern, html_icerik, re.DOTALL)
     
-    # Eğer ilk kalıp yakalayamazsa alternatif daha esnek kalıp
-    if not urun_bloklari:
-        urun_bloklari = re.findall(r'data-asin="([A-Z0-9]{10})".*?<span class="a-size-base-plus a-color-base a-text-normal">(.*?)</span>.*?<span class="a-price-whole">(.*?)</span>', html_icerik, re.DOTALL)
-
-    for asin, baslik, fiyat in urun_bloklari:
+    for asin, baslik_html, fiyat_str in matches:
         try:
-            temiz_baslik = baslik.strip()[:50] + "..."
-            # Görünmeyen boşlukları ve karakterleri temizle
-            temiz_fiyat_str = fiyat.replace(".", "").replace(",", ".").replace("\xa0", "").strip()
-            # Sadece sayısal kısmı filtrele
-            temiz_fiyat_str = re.sub(r'[^\d.]', '', temiz_fiyat_str)
-            temiz_fiyat = float(temiz_fiyat_str)
-            
-            bulunan_urunler.append({"asin": asin, "baslik": temiz_baslik, "fiyat": temiz_fiyat})
-        except Exception:
+            temiz_baslik = re.sub('<[^<]+?>', '', baslik_html).strip()[:60]
+            temiz_fiyat_str = re.sub(r'[^\d]', '', fiyat_str)
+            fiyat = float(temiz_fiyat_str)
+            bulunan_urunler.append({"asin": asin, "baslik": temiz_baslik, "fiyat": fiyat})
+        except:
             continue
-            
     return bulunan_urunler
 
 def ana_program():
-    print("Tarama başladı...")
     global veritabanı
-    yeni_urun_sayisi = 0
-    fiyat_dusen_sayisi = 0
-
-    # Gereksiz iç içe sayfa döngüsünü kaldırıp doğrudan elindeki 45 temiz linke odaklanıyoruz
+    print(f"Tarama başlatılıyor. Toplam {len(url_listesi)} sayfa kontrol edilecek.")
+    
     for hedef_url in url_listesi:
-        print(f"Tarandığı sayfa: {hedef_url}")
-        
         html = amazon_sayfa_tara(hedef_url)
-        if not html:
-            continue
+        if not html: continue
             
         urunler = veriyi_isle(html)
-        print(f"Bu sayfada {len(urunler)} ürün tespit edildi.")
         
         for urun in urunler:
             asin = urun["asin"]
             fiyat = urun["fiyat"]
             baslik = urun["baslik"]
-            link = f"https://www.amazon.com.tr/dp/{asin}"
             
-            # KONTROL 1: YENİ ÜRÜN KEŞFİ
             if asin not in veritabanı:
                 veritabanı[asin] = {"baslik": baslik, "fiyat": fiyat}
-                yeni_urun_sayisi += 1
-                telegram_mesaj_gonder(f"🚨 *YENİ ÜRÜN BULUNDU!*\n\n📦 {baslik}\n💰 Fiyat: {fiyat} TL\n🔗 [Ürüne Git]({link})")
-            
-            # KONTROL 2: FİYAT DÜŞÜŞÜ
-            else:
-                eski_fiyat = veritabanı[asin]["fiyat"]
-                if fiyat < eski_fiyat:
-                    fiyat_dusen_sayisi += 1
-                    telegram_mesaj_gonder(f"📉 *FİYAT DÜŞTÜ!*\n\n📦 {baslik}\n❌ Eski: {eski_fiyat} TL\n✅ Yeni: {fiyat} TL\n🔗 [Ürüne Git]({link})")
-                
-                # Fiyatı her koşulda en günceliyle eşitle
+                telegram_mesaj_gonder(f"🚨 *YENİ ÜRÜN*\n📦 {baslik}\n💰 {fiyat} TL")
+            elif fiyat < veritabanı[asin]["fiyat"]:
+                telegram_mesaj_gonder(f"📉 *İNDİRİM*\n📦 {baslik}\n✅ Yeni: {fiyat} TL")
                 veritabanı[asin]["fiyat"] = fiyat
+        
+        # API'yi patlatmamak ve bloklanmamak için her sayfadan sonra bekleme
+        time.sleep(random.uniform(3, 7))
 
-        # Bloklanmayı önlemek için küçük bekleme
-        time.sleep(random.randint(1, 3))
-
-    # Tarama tamamlansın ya da yarıda kesilsin, json dosyasını KESİNLİKLE yazmaya zorla
+    # Tüm tarama bitince dosyayı tek seferde güncelle
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(veritabanı, f, ensure_ascii=False, indent=4)
-        
-    print(f"Tarama bitti. {yeni_urun_sayisi} yeni ürün, {fiyat_dusen_sayisi} indirim bulundu.")
+    print("İşlem tamamlandı.")
 
 if __name__ == "__main__":
     ana_program()
