@@ -176,8 +176,8 @@
     },
     "B08HYFSXKW": {
         "baslik": "SanDisk Ultra SDSQUNR-064G-GN3MN Class 10 UHS-I 64 GB Micro SD Kart",
-        "fiyat": 797.01,
-        "en_dusuk_fiyat": 797.01
+        "fiyat": 783.0,
+        "en_dusuk_fiyat": 783.0
     },
     "B09X7FXHVJ": {
         "baslik": "SanDisk Extreme PRO SDXC UHS-I Hafıza Kartı, 128 GB, 200 MB/sn Aktarım Hızı, U3:",
@@ -626,7 +626,7 @@
     },
     "B01GYBQUF2": {
         "baslik": "Logitech MK235 Kablosuz Set 920-007925",
-        "fiyat": 1099.0,
+        "fiyat": 1188.0,
         "en_dusuk_fiyat": 1099.0
     },
     "B0GP16PJHP": {
@@ -1346,8 +1346,8 @@
     },
     "B074B4P7KD": {
         "baslik": "SanDisk Ultra 16 GB microSDHC Hafıza Kartı, 80MB/sn UHS-I Class 10 - SDSQUNS-016",
-        "fiyat": 602.91,
-        "en_dusuk_fiyat": 602.91
+        "fiyat": 594.0,
+        "en_dusuk_fiyat": 594.0
     },
     "B0DFVGLLS5": {
         "baslik": "Samsung 55 inç Neo QLED QN85F 4K Vision AI Smart TV (2025)",
@@ -2256,7 +2256,7 @@
     },
     "B077PZLGVB": {
         "baslik": "TP-Link Archer VR300, AC1200 Mbps Kablosuz Dual-Band Fiber Destekli VDSL/ADSL Mo",
-        "fiyat": 1618.0,
+        "fiyat": 1715.0,
         "en_dusuk_fiyat": 1618.0
     },
     "B0DX288V3N": {
@@ -47863,5 +47863,40 @@
         "baslik": "Zore Apple ile uyumlu iPhone 13 Pro Max Kılıf IC Çipli Zore Wireless Şarj Özelli",
         "fiyat": 548.26,
         "en_dusuk_fiyat": 548.26
+    },
+    "B0DSG52H7D": {
+        "baslik": "ASUS-PRIME-RX9070XT-O16G-AMD-RADEON-RX 9070 XT-16GB GDDR6 OC-HDMI 3xDP EKRAN KAR",
+        "fiyat": 35989.3,
+        "en_dusuk_fiyat": 35989.3
+    },
+    "B0FWD6WS86": {
+        "baslik": "Apple MacBook Pro Laptop: M5 çip, 14.2 inç Liquid Retina XDR Ekran, Apple Intell",
+        "fiyat": 104399.0,
+        "en_dusuk_fiyat": 104399.0
+    },
+    "B0GQVFC628": {
+        "baslik": "Apple iPhone 17e 256 GB: 6.1 inç Super Retina XDR Ekran, A19 Çip, Tüm Gün Süren ",
+        "fiyat": 52499.0,
+        "en_dusuk_fiyat": 52499.0
+    },
+    "B0FQFN4XRX": {
+        "baslik": "Apple Watch Series 11 GPS 42 mm Uzay Grisi Alüminyum Kasa Akıllı Saat ve Siyah S",
+        "fiyat": 21233.52,
+        "en_dusuk_fiyat": 21233.52
+    },
+    "B0DXKMXPXW": {
+        "baslik": "JBL Flip7, Bluetooth Hoparlör, IP67, Siyah",
+        "fiyat": 6785.34,
+        "en_dusuk_fiyat": 6785.34
+    },
+    "B085PFRFKX": {
+        "baslik": "TP-Link TL-MR100, N300 Mbps Kablosuz 4G LTE Router, 4G/3G SIM Yuvası, 32 Cihaza ",
+        "fiyat": 2149.0,
+        "en_dusuk_fiyat": 2149.0
+    },
+    "B0FMFFXTYT": {
+        "baslik": "Samsung HW-QS700FTK Soundbar",
+        "fiyat": 17999.0,
+        "en_dusuk_fiyat": 17999.0
     }
 }
