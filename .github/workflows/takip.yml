@@ -3,11 +3,19 @@ name: Amazon Fiyat Takip Botu
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/15 * * * *'
+
+# Bir önceki tarama bitmeden yenisi başlarsa git push çakışması ve
+# çift bildirim olmasın diye: yeni tetiklenen çalışma, öncekinin
+# bitmesini SIRAYA GİREREK bekler (iptal etmez).
+concurrency:
+  group: amazon-fiyat-takip
+  cancel-in-progress: false
 
 jobs:
   bot-gorevi:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
     permissions:
       contents: write
     steps:
@@ -20,7 +28,7 @@ jobs:
           python-version: '3.10'
 
       - name: Gerekli Paketleri Yukle
-        run: pip install requests
+        run: pip install -r requirements.txt
 
       - name: Botu Calistir
         env:
