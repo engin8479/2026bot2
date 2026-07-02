@@ -1,0 +1,48 @@
+name: Amazon Fiyat Takip Botu
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *'
+
+jobs:
+  bot-gorevi:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Depoyu Klonla
+        uses: actions/checkout@v3
+
+      - name: Python Kur
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Gerekli Paketleri Yukle
+        run: pip install requests
+
+      - name: Botu Calistir
+        env:
+          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py
+
+      - name: Degisiklikleri Kaydet (Push)
+        if: always()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Dosyayı ekle
+          git add urunler.json
+          
+          # Sadece değişiklik varsa commit at, yoksa sessiz kal
+          git commit -m "Amazon verisi güncellendi" || echo "Degisiklik yok, commit atılmadı."
+          
+          # Hata almamak için önce pull yap
+          git pull --rebase origin main
+          
+          # Push et
+          git push
