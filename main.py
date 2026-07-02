@@ -25,7 +25,6 @@ SAYFA_DENEME_SAYISI = 3
 KAYIT_ARALIGI_SAYFA = 10
 MAX_PARALEL_ISTEK = 5
 
-# YENİ OPTİMİZASYON 1: İsteklerin darboğaz yapmaması için Session ve Bağlantı Havuzu
 session = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=MAX_PARALEL_ISTEK, pool_maxsize=MAX_PARALEL_ISTEK)
 session.mount('https://', adapter)
@@ -80,7 +79,6 @@ def telegram_mesaj_gonder(mesaj):
     except Exception as e:
         print(f"Telegram mesajı gönderilemedi: {e}")
 
-# YENİ OPTİMİZASYON 2: Ana programı bekletmemek için Telegram mesajlarını arka planda yolla
 def telegram_arkaplan(mesaj):
     threading.Thread(target=telegram_mesaj_gonder, args=(mesaj,)).start()
 
@@ -96,7 +94,6 @@ def amazon_sayfa_tara(url):
     scraper_url = "https://api.scraperapi.com/"
     params = {"api_key": SCRAPER_API_KEY, "url": url, "country_code": "tr", "render": "false"}
     try:
-        # requests.get yerine Session kullanılıyor
         response = session.get(scraper_url, params=params, timeout=60)
         if response.status_code == 200:
             return response.text
@@ -185,7 +182,6 @@ def sayfayi_getir(url, sayfa_no):
         if html:
             return veriyi_isle(html)
         if deneme < SAYFA_DENEME_SAYISI:
-            # YENİ OPTİMİZASYON 3: Hata durumundaki aşırı bekleme süresi 1 saniyeye düşürüldü
             time.sleep(1)
     return None
 
@@ -197,6 +193,10 @@ def ana_program():
     toplam_yeni = 0
     toplam_indirim = 0
     toplam_sayfa_istegi = 0
+    toplam_taranan_urun = 0
+    
+    # 30 saniyelik zamanlayıcı için başlangıç süresini alıyoruz
+    son_bildirim_zamani = time.time()
 
     print(f"Tarama başlatılıyor. {len(ARAMALAR)} kategori kontrol edilecek (kategori başına en fazla {MAX_SAYFA} sayfa).")
     print(f"Veritabanı dosyası: {DATA_FILE}")
@@ -236,7 +236,9 @@ def ana_program():
                         break 
                 else:
                     bos_sayac = 0
-                    print(f"  Sayfa {sayfa_no}: {len(urunler)} ürün bulundu.")
+                    urun_sayisi = len(urunler)
+                    toplam_taranan_urun += urun_sayisi
+                    print(f"  Sayfa {sayfa_no}: {urun_sayisi} ürün bulundu.")
 
                     for urun in urunler:
                         asin = urun["asin"]
@@ -251,13 +253,7 @@ def ana_program():
                                 "en_dusuk_fiyat": fiyat,
                             }
                             toplam_yeni += 1
-                            # YENİ: Beklememek için telegram_arkaplan kullanılıyor
-                            telegram_arkaplan(
-                                f"🆕 *YENİ ÜRÜN TAKİBE ALINDI*\n"
-                                f"📦 {baslik}\n"
-                                f"💰 Fiyat: {fiyat:.2f} TL\n"
-                                f"🔗 {link}"
-                            )
+                            # YENİ ÜRÜN BİLDİRİMİ BURADAN SİLİNDİ
                         else:
                             eski_fiyat = veritabani[asin]["fiyat"]
                             if fiyat < eski_fiyat:
@@ -268,7 +264,7 @@ def ana_program():
                                 veritabani[asin]["en_dusuk_fiyat"] = en_dusuk
                                 veritabani[asin]["baslik"] = baslik
                                 toplam_indirim += 1
-                                # YENİ: Beklememek için telegram_arkaplan kullanılıyor
+                                # İNDİRİM BİLDİRİMİ KORUNDU
                                 telegram_arkaplan(
                                     f"📉 *FİYAT DÜŞTÜ*\n"
                                     f"📦 {baslik}\n"
@@ -282,6 +278,16 @@ def ana_program():
                                 veritabani[asin]["fiyat"] = fiyat
                                 veritabani[asin]["baslik"] = baslik
 
+                # 30 Saniyelik Zamanlayıcı Kontrolü
+                if time.time() - son_bildirim_zamani >= 30:
+                    telegram_arkaplan(
+                        f"⏳ *Durum Güncellemesi*\n"
+                        f"📄 Şu anki Sayfa: {sayfa_no}\n"
+                        f"📦 Taranan Toplam Ürün: {toplam_taranan_urun}\n"
+                        f"🆕 Yeni Eklenen Ürün: {toplam_yeni}"
+                    )
+                    son_bildirim_zamani = time.time()
+
                 if sayfa_no % KAYIT_ARALIGI_SAYFA == 0:
                     veritabanini_kaydet()
 
@@ -289,7 +295,6 @@ def ana_program():
                 break 
                 
             if not kategori_bitti:
-                # YENİ OPTİMİZASYON 4: Gruplar arası gereksiz bekleme süresi 0.1 saniyeye düşürüldü
                 time.sleep(0.1)
                 
         veritabanini_kaydet()
