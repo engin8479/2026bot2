@@ -265,6 +265,8 @@ def ana_program():
     toplam_sayfa_istegi = 0
 
     print(f"Tarama başlatılıyor. {len(ARAMALAR)} kategori kontrol edilecek (kategori başına en fazla {MAX_SAYFA} sayfa).")
+    print(f"Veritabanı dosyası: {DATA_FILE}")
+    print(f"Başlangıçta hafızada kayıtlı ürün sayısı: {len(veritabani)}")
 
     for arama in ARAMALAR:
         etiket = arama["etiket"]
@@ -278,82 +280,88 @@ def ana_program():
             toplam_sayfa_istegi += 1
 
             urunler = sayfayi_getir(sayfa_url, sayfa_no)
+            kategori_bitti = False
 
             if urunler is None:
                 # Sayfa hiç çekilemedi -> geçici hata, bu sayfayı atla ama
                 # kategori taramasına devam et (kategori bitti anlamına gelmez)
                 print(f"  Sayfa {sayfa_no}: çekilemedi, atlanıyor.")
                 time.sleep(random.uniform(3, 6))
-                continue
 
-            if len(urunler) == 0:
+            elif len(urunler) == 0:
                 bos_sayac += 1
                 print(f"  Sayfa {sayfa_no}: ürün bulunamadı ({bos_sayac}/{ARDISIK_BOS_SAYFA_LIMIT}).")
                 if bos_sayac >= ARDISIK_BOS_SAYFA_LIMIT:
                     print(f"  Kategori bitti kabul edildi, sayfa {sayfa_no}'de durduruldu -> sonraki kategoriye geçiliyor.")
-                    break
-                time.sleep(random.uniform(3, 6))
-                continue
-
-            bos_sayac = 0
-            print(f"  Sayfa {sayfa_no}: {len(urunler)} ürün bulundu.")
-
-            for urun in urunler:
-                asin = urun["asin"]
-                fiyat = urun["fiyat"]
-                baslik = urun["baslik"]
-                link = f"https://www.amazon.com.tr/dp/{asin}"
-
-                if asin not in veritabani:
-                    veritabani[asin] = {
-                        "baslik": baslik,
-                        "fiyat": fiyat,
-                        "en_dusuk_fiyat": fiyat,
-                    }
-                    toplam_yeni += 1
-                    telegram_mesaj_gonder(
-                        f"🆕 *YENİ ÜRÜN TAKİBE ALINDI*\n"
-                        f"📦 {baslik}\n"
-                        f"💰 Fiyat: {fiyat:.2f} TL\n"
-                        f"🔗 {link}"
-                    )
+                    kategori_bitti = True
                 else:
-                    eski_fiyat = veritabani[asin]["fiyat"]
-                    if fiyat < eski_fiyat:
-                        fark = eski_fiyat - fiyat
-                        yuzde = (fark / eski_fiyat) * 100 if eski_fiyat else 0
-                        en_dusuk = min(fiyat, veritabani[asin].get("en_dusuk_fiyat", fiyat))
-                        veritabani[asin]["fiyat"] = fiyat
-                        veritabani[asin]["en_dusuk_fiyat"] = en_dusuk
-                        veritabani[asin]["baslik"] = baslik
-                        toplam_indirim += 1
+                    time.sleep(random.uniform(3, 6))
+
+            else:
+                bos_sayac = 0
+                print(f"  Sayfa {sayfa_no}: {len(urunler)} ürün bulundu.")
+
+                for urun in urunler:
+                    asin = urun["asin"]
+                    fiyat = urun["fiyat"]
+                    baslik = urun["baslik"]
+                    link = f"https://www.amazon.com.tr/dp/{asin}"
+
+                    if asin not in veritabani:
+                        veritabani[asin] = {
+                            "baslik": baslik,
+                            "fiyat": fiyat,
+                            "en_dusuk_fiyat": fiyat,
+                        }
+                        toplam_yeni += 1
                         telegram_mesaj_gonder(
-                            f"📉 *FİYAT DÜŞTÜ*\n"
+                            f"🆕 *YENİ ÜRÜN TAKİBE ALINDI*\n"
                             f"📦 {baslik}\n"
-                            f"❌ Eski Fiyat: {eski_fiyat:.2f} TL\n"
-                            f"✅ Yeni Fiyat: {fiyat:.2f} TL\n"
-                            f"🔻 İndirim: %{yuzde:.1f} ({fark:.2f} TL)\n"
-                            f"🏆 Tarihi En Düşük: {en_dusuk:.2f} TL\n"
+                            f"💰 Fiyat: {fiyat:.2f} TL\n"
                             f"🔗 {link}"
                         )
-                    elif fiyat != eski_fiyat:
-                        # Fiyat arttı: bildirim atmıyoruz ama veritabanını
-                        # güncel tutuyoruz ki bir sonraki düşüş doğru
-                        # kıyaslansın.
-                        veritabani[asin]["fiyat"] = fiyat
-                        veritabani[asin]["baslik"] = baslik
+                    else:
+                        eski_fiyat = veritabani[asin]["fiyat"]
+                        if fiyat < eski_fiyat:
+                            fark = eski_fiyat - fiyat
+                            yuzde = (fark / eski_fiyat) * 100 if eski_fiyat else 0
+                            en_dusuk = min(fiyat, veritabani[asin].get("en_dusuk_fiyat", fiyat))
+                            veritabani[asin]["fiyat"] = fiyat
+                            veritabani[asin]["en_dusuk_fiyat"] = en_dusuk
+                            veritabani[asin]["baslik"] = baslik
+                            toplam_indirim += 1
+                            telegram_mesaj_gonder(
+                                f"📉 *FİYAT DÜŞTÜ*\n"
+                                f"📦 {baslik}\n"
+                                f"❌ Eski Fiyat: {eski_fiyat:.2f} TL\n"
+                                f"✅ Yeni Fiyat: {fiyat:.2f} TL\n"
+                                f"🔻 İndirim: %{yuzde:.1f} ({fark:.2f} TL)\n"
+                                f"🏆 Tarihi En Düşük: {en_dusuk:.2f} TL\n"
+                                f"🔗 {link}"
+                            )
+                        elif fiyat != eski_fiyat:
+                            # Fiyat arttı: bildirim atmıyoruz ama veritabanını
+                            # güncel tutuyoruz ki bir sonraki düşüş doğru
+                            # kıyaslansın.
+                            veritabani[asin]["fiyat"] = fiyat
+                            veritabani[asin]["baslik"] = baslik
 
-            # API'yi patlatmamak ve bloklanmamak için sayfalar arası bekleme
-            time.sleep(random.uniform(3, 7))
+                # API'yi patlatmamak ve bloklanmamak için sayfalar arası bekleme
+                time.sleep(random.uniform(3, 7))
 
-            # ARA KAYIT: uzun süren taramada ilerlemenin kaybolmaması için
+            # ARA KAYIT: sayfa çekilemese/boş gelse bile HER durumda
+            # (koşulsuz) her N sayfada bir diske yazılır.
             if sayfa_no % KAYIT_ARALIGI_SAYFA == 0:
                 veritabanini_kaydet()
-                print(f"  💾 Ara kayıt yapıldı (sayfa {sayfa_no}).")
+                print(f"  💾 Ara kayıt yapıldı (sayfa {sayfa_no}, dosya: {DATA_FILE}).")
+
+            if kategori_bitti:
+                break
 
         # Her kategori sonrası veritabanını diske yaz (uzun taramada
         # bir hata/timeout olursa o ana kadarki ilerleme kaybolmasın)
         veritabanini_kaydet()
+        print(f"Kategori sonu kaydı yapıldı: {DATA_FILE}")
 
     print(
         f"\nİşlem tamamlandı. Toplam istek: {toplam_sayfa_istegi} | "
