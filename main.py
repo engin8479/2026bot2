@@ -4,6 +4,7 @@ import time
 import random
 import re
 import requests
+import threading
 from urllib.parse import urlparse, parse_qs, urlencode
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
@@ -14,27 +15,21 @@ from concurrent.futures import ThreadPoolExecutor
 BASE_DIR = os.getcwd()
 DATA_FILE = os.path.join(BASE_DIR, "urunler.json")
 
-# Ortam değişkenleri (GitHub Secrets üzerinden gelir)
 SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-# Her arama/kategori en fazla kaç sayfa taransın? (güvenlik tavanı)
 MAX_SAYFA = int(os.environ.get("MAX_SAYFA", "420"))
-
-# Üst üste kaç boş sayfa görülürse "bu kategori bitti" kabul edilsin
 ARDISIK_BOS_SAYFA_LIMIT = 2
-
-# Bir sayfa çekilemezse (ağ/API hatası) kaç kez tekrar denensin
 SAYFA_DENEME_SAYISI = 3
-
-# Tarama uzun sürdüğü için (400 sayfaya kadar), her N sayfada bir
-# veritabanını diske yaz.
 KAYIT_ARALIGI_SAYFA = 10
-
-# YENİ OPTİMİZASYON: Aynı anda atılacak maksimum istek sayısı
 MAX_PARALEL_ISTEK = 5
 
+# YENİ OPTİMİZASYON 1: İsteklerin darboğaz yapmaması için Session ve Bağlantı Havuzu
+session = requests.Session()
+adapter = requests.adapters.HTTPAdapter(pool_connections=MAX_PARALEL_ISTEK, pool_maxsize=MAX_PARALEL_ISTEK)
+session.mount('https://', adapter)
+session.mount('http://', adapter)
 
 # =====================================================================
 # 2. TARANACAK KATEGORİLER (TABAN LİNKLER)
@@ -45,7 +40,6 @@ ARAMALAR = [
         "url": "https://www.amazon.com.tr/s?i=electronics&rh=n:12466496031,p_6:A1UNQM1SR2CHM&s=popularity-rank&fs=true",
     },
 ]
-
 
 # =====================================================================
 # 3. VERİTABANI YÜKLEME
@@ -59,7 +53,6 @@ if os.path.exists(DATA_FILE):
 else:
     veritabani = {}
 
-
 KAMPANYA_ROZETI_SINIFLARI = [
     "coupon",
     "kupon",
@@ -68,7 +61,6 @@ KAMPANYA_ROZETI_SINIFLARI = [
     "degis-tokus",
     "değiş-tokuş",
 ]
-
 
 # =====================================================================
 # 4. YARDIMCI FONKSİYONLAR
@@ -84,13 +76,15 @@ def telegram_mesaj_gonder(mesaj):
         "disable_web_page_preview": False,
     }
     try:
-        requests.post(url, json=payload, timeout=10)
+        requests.post(url, json=payload, timeout=5)
     except Exception as e:
         print(f"Telegram mesajı gönderilemedi: {e}")
 
+# YENİ OPTİMİZASYON 2: Ana programı bekletmemek için Telegram mesajlarını arka planda yolla
+def telegram_arkaplan(mesaj):
+    threading.Thread(target=telegram_mesaj_gonder, args=(mesaj,)).start()
 
 def sayfa_url_olustur(taban_url, sayfa_no):
-    """Taban linkin sonuna &page=N ekler (mevcut page varsa günceller)."""
     parsed = urlparse(taban_url)
     qs = parse_qs(parsed.query, keep_blank_values=True)
     qs["page"] = [str(sayfa_no)]
@@ -98,13 +92,12 @@ def sayfa_url_olustur(taban_url, sayfa_no):
     query = urlencode(flat, safe="%,:|")
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{query}"
 
-
 def amazon_sayfa_tara(url):
     scraper_url = "https://api.scraperapi.com/"
-    # OPTİMİZASYON: render=false parametresi eklenerek JS bekleme süresi iptal edildi, çok daha hızlı çalışır.
     params = {"api_key": SCRAPER_API_KEY, "url": url, "country_code": "tr", "render": "false"}
     try:
-        response = requests.get(scraper_url, params=params, timeout=60)
+        # requests.get yerine Session kullanılıyor
+        response = session.get(scraper_url, params=params, timeout=60)
         if response.status_code == 200:
             return response.text
         print(f"  Uyarı: HTTP {response.status_code} -> {url[:90]}...")
@@ -113,11 +106,9 @@ def amazon_sayfa_tara(url):
         print(f"  Uyarı: İstek hatası ({e}) -> {url[:90]}...")
         return None
 
-
 def veriyi_isle(html_icerik):
     bulunan_urunler = []
     soup = BeautifulSoup(html_icerik, "html.parser")
-
     kartlar = soup.select('div[data-component-type="s-search-result"]')
 
     for kart in kartlar:
@@ -140,7 +131,6 @@ def veriyi_isle(html_icerik):
 
     return bulunan_urunler
 
-
 def kart_gercek_fiyati_bul(kart):
     for fiyat_span in kart.select("span.a-price"):
         siniflar = fiyat_span.get("class", [])
@@ -158,9 +148,7 @@ def kart_gercek_fiyati_bul(kart):
             continue
 
         return _fiyat_metnini_sayiya_cevir(fiyat_metni)
-
     return None
-
 
 def _kampanya_rozeti_icinde_mi(eleman):
     guncel = eleman.parent
@@ -174,7 +162,6 @@ def _kampanya_rozeti_icinde_mi(eleman):
         guncel = guncel.parent
     return False
 
-
 def _fiyat_metnini_sayiya_cevir(metin):
     try:
         sadece_rakam = re.sub(r"[^\d,.]", "", metin)
@@ -184,7 +171,6 @@ def _fiyat_metnini_sayiya_cevir(metin):
     except Exception:
         return None
 
-
 def veritabanini_kaydet():
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -192,16 +178,16 @@ def veritabanini_kaydet():
     except Exception as e:
         print(f"  Uyarı: veritabanı diske yazılamadı: {e}")
 
-
 def sayfayi_getir(url, sayfa_no):
+    print(f"  🚀 Sayfa {sayfa_no} aranıyor...")
     for deneme in range(1, SAYFA_DENEME_SAYISI + 1):
         html = amazon_sayfa_tara(url)
         if html:
             return veriyi_isle(html)
         if deneme < SAYFA_DENEME_SAYISI:
-            time.sleep(random.uniform(4, 8))
+            # YENİ OPTİMİZASYON 3: Hata durumundaki aşırı bekleme süresi 1 saniyeye düşürüldü
+            time.sleep(1)
     return None
-
 
 # =====================================================================
 # 5. ANA PROGRAM
@@ -225,7 +211,6 @@ def ana_program():
         print(f"\n>> Kategori: {etiket}")
         kategori_bitti = False
 
-        # Sayfaları 5'li gruplar (chunk) halinde tara
         for sayfa_grubu_baslangic in range(1, MAX_SAYFA + 1, MAX_PARALEL_ISTEK):
             hedef_sayfalar = []
             for i in range(MAX_PARALEL_ISTEK):
@@ -233,28 +218,22 @@ def ana_program():
                 if s_no <= MAX_SAYFA:
                     hedef_sayfalar.append(s_no)
 
-            # ThreadPoolExecutor ile 5 isteği AYNANDA başlat
             with ThreadPoolExecutor(max_workers=MAX_PARALEL_ISTEK) as executor:
-                # Sayfa numarası ve işlenmiş verileri eşleştirerek geri döndürür
                 sonuclar = list(executor.map(lambda sn: (sn, sayfayi_getir(sayfa_url_olustur(taban_url, sn), sn)), hedef_sayfalar))
 
-            # Sonuçlar geldiğinde orijinal yapıya ve sıraya bağlı kalarak işle
             for sayfa_no, urunler in sonuclar:
                 sayfa_url = sayfa_url_olustur(taban_url, sayfa_no)
                 toplam_sayfa_istegi += 1
 
                 if urunler is None:
-                    # Sayfa hiç çekilemedi -> geçici hata, atla. Beklemeyi gruplar sonuna taşıdık.
                     print(f"  Sayfa {sayfa_no}: çekilemedi, atlanıyor.")
-                
                 elif len(urunler) == 0:
                     bos_sayac += 1
                     print(f"  Sayfa {sayfa_no}: ürün bulunamadı ({bos_sayac}/{ARDISIK_BOS_SAYFA_LIMIT}).")
                     if bos_sayac >= ARDISIK_BOS_SAYFA_LIMIT:
                         print(f"  Kategori bitti kabul edildi, sayfa {sayfa_no}'de durduruldu -> sonraki kategoriye geçiliyor.")
                         kategori_bitti = True
-                        break # İç döngüyü (grup işleme) kır
-                
+                        break 
                 else:
                     bos_sayac = 0
                     print(f"  Sayfa {sayfa_no}: {len(urunler)} ürün bulundu.")
@@ -272,7 +251,8 @@ def ana_program():
                                 "en_dusuk_fiyat": fiyat,
                             }
                             toplam_yeni += 1
-                            telegram_mesaj_gonder(
+                            # YENİ: Beklememek için telegram_arkaplan kullanılıyor
+                            telegram_arkaplan(
                                 f"🆕 *YENİ ÜRÜN TAKİBE ALINDI*\n"
                                 f"📦 {baslik}\n"
                                 f"💰 Fiyat: {fiyat:.2f} TL\n"
@@ -288,7 +268,8 @@ def ana_program():
                                 veritabani[asin]["en_dusuk_fiyat"] = en_dusuk
                                 veritabani[asin]["baslik"] = baslik
                                 toplam_indirim += 1
-                                telegram_mesaj_gonder(
+                                # YENİ: Beklememek için telegram_arkaplan kullanılıyor
+                                telegram_arkaplan(
                                     f"📉 *FİYAT DÜŞTÜ*\n"
                                     f"📦 {baslik}\n"
                                     f"❌ Eski Fiyat: {eski_fiyat:.2f} TL\n"
@@ -301,19 +282,16 @@ def ana_program():
                                 veritabani[asin]["fiyat"] = fiyat
                                 veritabani[asin]["baslik"] = baslik
 
-                # ARA KAYIT: sayfa çekilemese/boş gelse bile HER durumda
                 if sayfa_no % KAYIT_ARALIGI_SAYFA == 0:
                     veritabanini_kaydet()
-                    print(f"  💾 Ara kayıt yapıldı (sayfa {sayfa_no}, dosya: {DATA_FILE}).")
 
             if kategori_bitti:
-                break # Dış döngüyü kır (Kategoriyi bitir)
+                break 
                 
-                # API'yi patlatmamak ve bloklanmamak için her 5'li Gruptan SONRA tek seferlik bekleme
             if not kategori_bitti:
-                time.sleep(random.uniform(1, 3))
-        # Her kategori sonrası veritabanını diske yaz
-        
+                # YENİ OPTİMİZASYON 4: Gruplar arası gereksiz bekleme süresi 0.1 saniyeye düşürüldü
+                time.sleep(0.1)
+                
         veritabanini_kaydet()
         print(f"Kategori sonu kaydı yapıldı: {DATA_FILE}")
 
@@ -322,13 +300,10 @@ def ana_program():
         f"Yeni ürün: {toplam_yeni} | İndirim bildirimi: {toplam_indirim}"
     )
 
-
 if __name__ == "__main__":
     try:
         ana_program()
     except Exception as e:
-        # Beklenmedik bir hata olsa bile (örn. zaman aşımı, bağlantı kopması)
-        # o ana kadar bulunan fiyat verilerini diske yazmayı garanti et.
         print(f"HATA: {e}")
         veritabanini_kaydet()
         print("Hata sonrası mevcut ilerleme diske kaydedildi.")
