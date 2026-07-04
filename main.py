@@ -52,6 +52,14 @@ if os.path.exists(DATA_FILE):
 else:
     veritabani = {}
 
+# Kategori bazlı "ilk tarama tamamlandı mı" bilgisini tutan meta bölümü.
+# Bu sayede bir kategori ilk kez taranırken (veritabanı henüz boşken)
+# bulunan tüm ürünler "yeni ürün" olarak bildirim göndermez; sadece
+# ilk tarama tamamlandıktan SONRAKİ taramalarda gerçekten yeni eklenen
+# ürünler için bildirim gider.
+if "_meta" not in veritabani or not isinstance(veritabani.get("_meta"), dict):
+    veritabani["_meta"] = {}
+
 KAMPANYA_ROZETI_SINIFLARI = [
     "coupon",
     "kupon",
@@ -236,7 +244,13 @@ def ana_program():
         taban_url = arama["url"]
         bos_sayac = 0
 
+        # Bu kategori daha önce en az bir kez tam taranmış mı?
+        meta_kaydi = veritabani["_meta"].get(etiket, {})
+        ilk_tarama_mi = not meta_kaydi.get("ilk_tarama_tamamlandi", False)
+
         print(f"\n>> Kategori: {etiket}")
+        if ilk_tarama_mi:
+            print("  ℹ️ Bu kategori ilk kez taranıyor, yeni ürün bildirimleri bu turda gönderilmeyecek.")
         kategori_bitti = False
 
         for sayfa_grubu_baslangic in range(1, MAX_SAYFA + 1, MAX_PARALEL_ISTEK):
@@ -281,7 +295,13 @@ def ana_program():
                                 "en_dusuk_fiyat": fiyat,
                             }
                             toplam_yeni += 1
-                            # YENİ ÜRÜN BİLDİRİMİ BURADAN SİLİNDİ
+                            if not ilk_tarama_mi:
+                                telegram_arkaplan(
+                                    f"🆕 *YENİ ÜRÜN*\n"
+                                    f"📦 {baslik}\n"
+                                    f"💰 Fiyat: {fiyat:.2f} TL\n"
+                                    f"🔗 {link}"
+                                )
                         else:
                             eski_fiyat = veritabani[asin]["fiyat"]
                             if fiyat < eski_fiyat:
@@ -325,6 +345,7 @@ def ana_program():
             if not kategori_bitti:
                 time.sleep(0.1)
                 
+        veritabani["_meta"].setdefault(etiket, {})["ilk_tarama_tamamlandi"] = True
         veritabanini_kaydet()
         print(f"Kategori sonu kaydı yapıldı: {DATA_FILE}")
 
