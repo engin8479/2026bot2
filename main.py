@@ -52,6 +52,25 @@ if os.path.exists(DATA_FILE):
 else:
     veritabani = {}
 
+# Eski sürümlerde veritabanı bazen liste ([{...}, {...}]) formatında
+# kaydedilmiş olabilir. Bu durumda veriyi kaybetmeden asin->kayıt
+# sözlüğüne çeviriyoruz.
+if isinstance(veritabani, list):
+    donusturulmus = {}
+    for eleman in veritabani:
+        if isinstance(eleman, dict) and eleman.get("asin"):
+            asin_deger = eleman["asin"]
+            donusturulmus[asin_deger] = {
+                "baslik": eleman.get("baslik", ""),
+                "fiyat": eleman.get("fiyat"),
+                "en_dusuk_fiyat": eleman.get("en_dusuk_fiyat", eleman.get("fiyat")),
+            }
+    veritabani = donusturulmus
+    print(f"  ℹ️ Eski liste formatındaki veritabanı sözlüğe çevrildi ({len(veritabani)} kayıt).")
+elif not isinstance(veritabani, dict):
+    print("  ⚠️ Uyarı: veritabani.json beklenmeyen bir formatta, sıfırdan başlanıyor.")
+    veritabani = {}
+
 # Kategori bazlı "ilk tarama tamamlandı mı" bilgisini tutan meta bölümü.
 # Bu sayede bir kategori ilk kez taranırken (veritabanı henüz boşken)
 # bulunan tüm ürünler "yeni ürün" olarak bildirim göndermez; sadece
