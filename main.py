@@ -35,8 +35,8 @@ session.mount('http://', adapter)
 # =====================================================================
 ARAMALAR = [
     {
-        "etiket": "Amazon Depo - Tüm Ürünler",
-        "url": "https://www.amazon.com.tr/s?rh=n:44219324031&s=popularity-rank",
+        "etiket": "Elektronik - 12466496031 (popülerlik)",
+        "url": "https://www.amazon.com.tr/s?i=electronics&rh=n:12466496031,p_6:A1UNQM1SR2CHM&s=popularity-rank&fs=true",
     },
 ]
 
@@ -51,33 +51,6 @@ if os.path.exists(DATA_FILE):
         veritabani = {}
 else:
     veritabani = {}
-
-# Eski sürümlerde veritabanı bazen liste ([{...}, {...}]) formatında
-# kaydedilmiş olabilir. Bu durumda veriyi kaybetmeden asin->kayıt
-# sözlüğüne çeviriyoruz.
-if isinstance(veritabani, list):
-    donusturulmus = {}
-    for eleman in veritabani:
-        if isinstance(eleman, dict) and eleman.get("asin"):
-            asin_deger = eleman["asin"]
-            donusturulmus[asin_deger] = {
-                "baslik": eleman.get("baslik", ""),
-                "fiyat": eleman.get("fiyat"),
-                "en_dusuk_fiyat": eleman.get("en_dusuk_fiyat", eleman.get("fiyat")),
-            }
-    veritabani = donusturulmus
-    print(f"  ℹ️ Eski liste formatındaki veritabanı sözlüğe çevrildi ({len(veritabani)} kayıt).")
-elif not isinstance(veritabani, dict):
-    print("  ⚠️ Uyarı: veritabani.json beklenmeyen bir formatta, sıfırdan başlanıyor.")
-    veritabani = {}
-
-# Kategori bazlı "ilk tarama tamamlandı mı" bilgisini tutan meta bölümü.
-# Bu sayede bir kategori ilk kez taranırken (veritabanı henüz boşken)
-# bulunan tüm ürünler "yeni ürün" olarak bildirim göndermez; sadece
-# ilk tarama tamamlandıktan SONRAKİ taramalarda gerçekten yeni eklenen
-# ürünler için bildirim gider.
-if "_meta" not in veritabani or not isinstance(veritabani.get("_meta"), dict):
-    veritabani["_meta"] = {}
 
 KAMPANYA_ROZETI_SINIFLARI = [
     "coupon",
@@ -135,9 +108,6 @@ def veriyi_isle(html_icerik):
     soup = BeautifulSoup(html_icerik, "html.parser")
     kartlar = soup.select('div[data-component-type="s-search-result"]')
 
-    if not kartlar:
-        _bos_sayfa_teshis_logu(html_icerik)
-
     for kart in kartlar:
         asin = (kart.get("data-asin") or "").strip()
         if not re.fullmatch(r"[A-Z0-9]{10}", asin):
@@ -158,39 +128,10 @@ def veriyi_isle(html_icerik):
 
     return bulunan_urunler
 
-def _bos_sayfa_teshis_logu(html_icerik):
-    uzunluk = len(html_icerik) if html_icerik else 0
-    kucuk = (html_icerik or "").lower()
-    supheli_kelimeler = {
-        "captcha": "captcha" in kucuk,
-        "robot / otomasyon uyarısı": ("robot" in kucuk and "otomatik" in kucuk) or "api-services-support" in kucuk,
-        "sorry / hata sayfası": "sorry" in kucuk or "üzgünüz" in kucuk,
-        "s-search-result yok ama farklı kart sınıfı olabilir": "data-component-type" in kucuk,
-    }
-    print(f"    ⚠️ TEŞHİS: HTML uzunluğu={uzunluk} karakter.")
-    for aciklama, sonuc in supheli_kelimeler.items():
-        if sonuc:
-            print(f"    ⚠️ TEŞHİS: Şüpheli işaret bulundu -> {aciklama}")
-    if uzunluk > 0:
-        print(f"    ⚠️ TEŞHİS: HTML'in ilk 300 karakteri: {html_icerik[:300]!r}")
-
 def kart_gercek_fiyati_bul(kart):
     for fiyat_span in kart.select("span.a-price"):
         siniflar = fiyat_span.get("class", [])
         if "a-text-price" in siniflar:
-            continue
-
-        # Amazon Depo kartlarında ana (depo) fiyatının yanında genellikle
-        # "Diğer satın alma seçenekleri" gibi ikincil/alternatif bir teklif
-        # fiyatı da gösterilir. Bu ikincil fiyatlar Amazon'un arayüzünde
-        # data-a-color="secondary" ile işaretlenir; ana/depo fiyatı ise
-        # data-a-color="base" olur. Sadece ana fiyatı almak için ikincil
-        # olanları atlıyoruz.
-        renk = (fiyat_span.get("data-a-color") or "").lower()
-        if renk == "secondary":
-            continue
-
-        if _diger_secenek_icinde_mi(fiyat_span):
             continue
 
         if _kampanya_rozeti_icinde_mi(fiyat_span):
@@ -205,21 +146,6 @@ def kart_gercek_fiyati_bul(kart):
 
         return _fiyat_metnini_sayiya_cevir(fiyat_metni)
     return None
-
-def _diger_secenek_icinde_mi(eleman):
-    # Ek güvence: "Diğer satın alma seçenekleri" / "teklif" gibi alternatif
-    # satıcı tekliflerini içeren blokların içinde kalan fiyatları da atla.
-    anahtar_kelimeler = ("olp", "other-offer", "buying-options", "diger-satin-alma")
-    guncel = eleman.parent
-    for _ in range(6):
-        if guncel is None or not hasattr(guncel, "get"):
-            break
-        siniflar = " ".join(guncel.get("class", []) or []).lower()
-        id_degeri = (guncel.get("id") or "").lower()
-        if any(k in siniflar or k in id_degeri for k in anahtar_kelimeler):
-            return True
-        guncel = guncel.parent
-    return False
 
 def _kampanya_rozeti_icinde_mi(eleman):
     guncel = eleman.parent
@@ -282,14 +208,7 @@ def ana_program():
         taban_url = arama["url"]
         bos_sayac = 0
 
-        # Bu kategori daha önce en az bir kez tam taranmış mı?
-        meta_kaydi = veritabani["_meta"].get(etiket, {})
-        ilk_tarama_mi = not meta_kaydi.get("ilk_tarama_tamamlandi", False)
-        kategori_bulunan_urun_sayisi = 0
-
         print(f"\n>> Kategori: {etiket}")
-        if ilk_tarama_mi:
-            print("  ℹ️ Bu kategori ilk kez taranıyor, yeni ürün bildirimleri bu turda gönderilmeyecek.")
         kategori_bitti = False
 
         for sayfa_grubu_baslangic in range(1, MAX_SAYFA + 1, MAX_PARALEL_ISTEK):
@@ -319,7 +238,6 @@ def ana_program():
                     bos_sayac = 0
                     urun_sayisi = len(urunler)
                     toplam_taranan_urun += urun_sayisi
-                    kategori_bulunan_urun_sayisi += urun_sayisi
                     print(f"  Sayfa {sayfa_no}: {urun_sayisi} ürün bulundu.")
 
                     for urun in urunler:
@@ -335,13 +253,7 @@ def ana_program():
                                 "en_dusuk_fiyat": fiyat,
                             }
                             toplam_yeni += 1
-                            if not ilk_tarama_mi:
-                                telegram_arkaplan(
-                                    f"🆕 *YENİ ÜRÜN*\n"
-                                    f"📦 {baslik}\n"
-                                    f"💰 Fiyat: {fiyat:.2f} TL\n"
-                                    f"🔗 {link}"
-                                )
+                            # YENİ ÜRÜN BİLDİRİMİ BURADAN SİLİNDİ
                         else:
                             eski_fiyat = veritabani[asin]["fiyat"]
                             if fiyat < eski_fiyat:
@@ -385,10 +297,6 @@ def ana_program():
             if not kategori_bitti:
                 time.sleep(0.1)
                 
-        if kategori_bulunan_urun_sayisi > 0:
-            veritabani["_meta"].setdefault(etiket, {})["ilk_tarama_tamamlandi"] = True
-        else:
-            print(f"  ⚠️ '{etiket}' kategorisinde hiç ürün bulunamadı, ilk tarama tamamlanmış sayılmadı (bir sonraki çalıştırmada tekrar denenecek).")
         veritabanini_kaydet()
         print(f"Kategori sonu kaydı yapıldı: {DATA_FILE}")
 
