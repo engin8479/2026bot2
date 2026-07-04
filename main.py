@@ -35,8 +35,8 @@ session.mount('http://', adapter)
 # =====================================================================
 ARAMALAR = [
     {
-        "etiket": "Elektronik - 12466496031 (popülerlik)",
-        "url": "https://www.amazon.com.tr/s?i=electronics&rh=n:12466496031,p_6:A1UNQM1SR2CHM&s=popularity-rank&fs=true",
+        "etiket": "Amazon Depo - Tüm Ürünler",
+        "url": "https://www.amazon.com.tr/Amazon-Depo/s?srs=44219324031&rh=n:44219324031&s=popularity-rank&fs=true",
     },
 ]
 
@@ -134,6 +134,19 @@ def kart_gercek_fiyati_bul(kart):
         if "a-text-price" in siniflar:
             continue
 
+        # Amazon Depo kartlarında ana (depo) fiyatının yanında genellikle
+        # "Diğer satın alma seçenekleri" gibi ikincil/alternatif bir teklif
+        # fiyatı da gösterilir. Bu ikincil fiyatlar Amazon'un arayüzünde
+        # data-a-color="secondary" ile işaretlenir; ana/depo fiyatı ise
+        # data-a-color="base" olur. Sadece ana fiyatı almak için ikincil
+        # olanları atlıyoruz.
+        renk = (fiyat_span.get("data-a-color") or "").lower()
+        if renk == "secondary":
+            continue
+
+        if _diger_secenek_icinde_mi(fiyat_span):
+            continue
+
         if _kampanya_rozeti_icinde_mi(fiyat_span):
             continue
 
@@ -146,6 +159,21 @@ def kart_gercek_fiyati_bul(kart):
 
         return _fiyat_metnini_sayiya_cevir(fiyat_metni)
     return None
+
+def _diger_secenek_icinde_mi(eleman):
+    # Ek güvence: "Diğer satın alma seçenekleri" / "teklif" gibi alternatif
+    # satıcı tekliflerini içeren blokların içinde kalan fiyatları da atla.
+    anahtar_kelimeler = ("olp", "other-offer", "buying-options", "diger-satin-alma")
+    guncel = eleman.parent
+    for _ in range(6):
+        if guncel is None or not hasattr(guncel, "get"):
+            break
+        siniflar = " ".join(guncel.get("class", []) or []).lower()
+        id_degeri = (guncel.get("id") or "").lower()
+        if any(k in siniflar or k in id_degeri for k in anahtar_kelimeler):
+            return True
+        guncel = guncel.parent
+    return False
 
 def _kampanya_rozeti_icinde_mi(eleman):
     guncel = eleman.parent
