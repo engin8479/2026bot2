@@ -36,7 +36,7 @@ session.mount('http://', adapter)
 ARAMALAR = [
     {
         "etiket": "Amazon Depo - Tüm Ürünler",
-        "url": "https://www.amazon.com.tr/Amazon-Depo/s?srs=44219324031&rh=n:44219324031&s=popularity-rank&fs=true",
+        "url": "https://www.amazon.com.tr/s?rh=n:44219324031&s=popularity-rank",
     },
 ]
 
@@ -135,6 +135,9 @@ def veriyi_isle(html_icerik):
     soup = BeautifulSoup(html_icerik, "html.parser")
     kartlar = soup.select('div[data-component-type="s-search-result"]')
 
+    if not kartlar:
+        _bos_sayfa_teshis_logu(html_icerik)
+
     for kart in kartlar:
         asin = (kart.get("data-asin") or "").strip()
         if not re.fullmatch(r"[A-Z0-9]{10}", asin):
@@ -154,6 +157,22 @@ def veriyi_isle(html_icerik):
         bulunan_urunler.append({"asin": asin, "baslik": baslik, "fiyat": fiyat})
 
     return bulunan_urunler
+
+def _bos_sayfa_teshis_logu(html_icerik):
+    uzunluk = len(html_icerik) if html_icerik else 0
+    kucuk = (html_icerik or "").lower()
+    supheli_kelimeler = {
+        "captcha": "captcha" in kucuk,
+        "robot / otomasyon uyarısı": ("robot" in kucuk and "otomatik" in kucuk) or "api-services-support" in kucuk,
+        "sorry / hata sayfası": "sorry" in kucuk or "üzgünüz" in kucuk,
+        "s-search-result yok ama farklı kart sınıfı olabilir": "data-component-type" in kucuk,
+    }
+    print(f"    ⚠️ TEŞHİS: HTML uzunluğu={uzunluk} karakter.")
+    for aciklama, sonuc in supheli_kelimeler.items():
+        if sonuc:
+            print(f"    ⚠️ TEŞHİS: Şüpheli işaret bulundu -> {aciklama}")
+    if uzunluk > 0:
+        print(f"    ⚠️ TEŞHİS: HTML'in ilk 300 karakteri: {html_icerik[:300]!r}")
 
 def kart_gercek_fiyati_bul(kart):
     for fiyat_span in kart.select("span.a-price"):
@@ -266,6 +285,7 @@ def ana_program():
         # Bu kategori daha önce en az bir kez tam taranmış mı?
         meta_kaydi = veritabani["_meta"].get(etiket, {})
         ilk_tarama_mi = not meta_kaydi.get("ilk_tarama_tamamlandi", False)
+        kategori_bulunan_urun_sayisi = 0
 
         print(f"\n>> Kategori: {etiket}")
         if ilk_tarama_mi:
@@ -299,6 +319,7 @@ def ana_program():
                     bos_sayac = 0
                     urun_sayisi = len(urunler)
                     toplam_taranan_urun += urun_sayisi
+                    kategori_bulunan_urun_sayisi += urun_sayisi
                     print(f"  Sayfa {sayfa_no}: {urun_sayisi} ürün bulundu.")
 
                     for urun in urunler:
@@ -364,7 +385,10 @@ def ana_program():
             if not kategori_bitti:
                 time.sleep(0.1)
                 
-        veritabani["_meta"].setdefault(etiket, {})["ilk_tarama_tamamlandi"] = True
+        if kategori_bulunan_urun_sayisi > 0:
+            veritabani["_meta"].setdefault(etiket, {})["ilk_tarama_tamamlandi"] = True
+        else:
+            print(f"  ⚠️ '{etiket}' kategorisinde hiç ürün bulunamadı, ilk tarama tamamlanmış sayılmadı (bir sonraki çalıştırmada tekrar denenecek).")
         veritabanini_kaydet()
         print(f"Kategori sonu kaydı yapıldı: {DATA_FILE}")
 
