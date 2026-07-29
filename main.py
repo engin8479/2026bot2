@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 BASE_DIR = os.getcwd()
 DATA_FILE = os.path.join(BASE_DIR, "urunler.json")
 
-SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "")
+SCRAPE_DO_TOKEN = os.environ.get("SCRAPE_DO_TOKEN", "")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
@@ -91,8 +91,15 @@ def sayfa_url_olustur(taban_url, sayfa_no):
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{query}"
 
 def amazon_sayfa_tara(url):
-    scraper_url = "https://api.scraperapi.com/"
-    params = {"api_key": SCRAPER_API_KEY, "url": url, "country_code": "tr", "render": "false"}
+    # scrape.do: render=false ve premium proxy kapalı olduğunda (varsayılan) istek 1 kredi harcar.
+    # render=true veya premium/residential proxy seçilirse kredi çarpanı artar.
+    scraper_url = "https://api.scrape.do/"
+    params = {
+        "token": SCRAPE_DO_TOKEN,
+        "url": url,
+        "render": "false",
+        "geoCode": "tr",
+    }
     try:
         response = session.get(scraper_url, params=params, timeout=60)
         if response.status_code == 200:
