@@ -91,20 +91,21 @@ def sayfa_url_olustur(taban_url, sayfa_no):
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{query}"
 
 def amazon_sayfa_tara(url):
-    # scrape.do: render=false ve premium proxy kapalı olduğunda (varsayılan) istek 1 kredi harcar.
-    # render=true veya premium/residential proxy seçilirse kredi çarpanı artar.
+    # scrape.do: render=false olduğunda (varsayılan/datacenter proxy) istek 1 kredi harcar.
+    # NOT: geoCode parametresi Hobby planda desteklenmiyor (Pro plan ve üzeri gerektiriyor),
+    # bu yüzden buraya eklenmedi -- eklenirse scrape.do isteği Amazon'a gitmeden 400 ile reddediyor.
     scraper_url = "https://api.scrape.do/"
     params = {
         "token": SCRAPE_DO_TOKEN,
         "url": url,
         "render": "false",
-        "geoCode": "tr",
     }
     try:
         response = session.get(scraper_url, params=params, timeout=60)
         if response.status_code == 200:
             return response.text
-        print(f"  Uyarı: HTTP {response.status_code} -> {url[:90]}...")
+        detay = response.text[:200].replace("\n", " ")
+        print(f"  Uyarı: HTTP {response.status_code} -> {url[:90]}... | Detay: {detay}")
         return None
     except Exception as e:
         print(f"  Uyarı: İstek hatası ({e}) -> {url[:90]}...")
